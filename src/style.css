@@ -1,0 +1,88 @@
+/* Общие стили */
+body {
+    background-color: #121212;
+    color: #ffffff;
+}
+
+.card {
+    background-color: #1e1e1e;
+    color: #ffffff;
+}
+
+.modal-content {
+    background-color: #1e1e1e;
+    color: #ffffff;
+}
+
+.btn-close {
+    filter: invert(1);
+}
+
+/* Общие стили для заголовков */
+h1.text-center, h2.text-center {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+/* Стили для кнопок */
+.btn-primary {
+    background-color: #007bff;
+    border-color: #007bff;
+}
+
+.btn-primary:hover {
+    background-color: #0056b3;
+    border-color: #004085;
+}
+
+.btn-outline-primary {
+    color: #007bff;
+    border-color: #007bff;
+}
+
+.btn-outline-primary:hover {
+    color: #fff;
+    background-color: #007bff;
+    border-color: #007bff;
+}
+
+.btn-success {
+    background-color: #28a745;
+    border-color: #28a745;
+}
+
+.btn-success:hover {
+    background-color: #218838;
+    border-color: #1e7e34;
+}
+
+/* Стили для контейнеров */
+.container {
+    margin-top: 50px;
+}
+
+.registration-container {
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.registration-container .form-control {
+    width: 100%;
+}
+
+.registration-container .btn-primary {
+    width: 100%;
+}
+
+/* Стили для сообщений */
+.alert {
+    margin-top: 20px;
+}
+
+.empty-section-message {
+    color: #343a40; /* Тёмно-серый цвет */
+    font-weight: 400; /* Более тонкий шрифт */
+    text-align: center;
+    margin-top: 20px;
+    font-size: 1.2rem; /* Увеличенный размер текста */
+}
