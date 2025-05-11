@@ -2,16 +2,28 @@
 require 'db.php';
 session_start();
 
+// Удаляем лишний PHP-код
 $profile_url = '';
 $profile_info = '';
+$showAuthButtons = true; // Показывать кнопки "Войти" и "Зарегистрироваться"
 if (isset($_SESSION['role'])) {
     $profile_url = $_SESSION['role'] === 'agent' ? 'agent_profile.php' : 'client_profile.php';
     $profile_info = $_SESSION['role'] === 'agent' ? 'Агент' : 'Клиент';
     $profile_info .= ' (' . ($_SESSION['login'] ?? 'Неизвестно') . ')';
+    $showAuthButtons = false; // Скрываем кнопки, если пользователь авторизован
 }
 
 // Предопределённые категории типов недвижимости
 $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Коммерческая недвижимость'];
+
+// Добавляем проверку на наличие данных в фильтрах
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && !empty($_GET)) {
+    $filters = array_filter($_GET, fn($value) => !is_null($value) && $value !== '');
+    // Используем $filters для обработки данных
+}
+
+$isClient = isset($_SESSION['role']) && $_SESSION['role'] === 'client';
+$clientId = $_SESSION['user_id'] ?? null;
 ?>
 
 <!DOCTYPE html>
@@ -24,14 +36,17 @@ $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Ко
     <link href="style.css" rel="stylesheet">
 </head>
 <body>
-    <div class="container mt-5">
-        <h1 class="text-center">Объекты недвижимости</h1>
-        <?php if ($profile_url): ?>
-            <div class="d-flex justify-content-end align-items-center mb-3">
+    <div class="container">
+        <div class="d-flex justify-content-end align-items-center mb-3">
+            <?php if ($showAuthButtons): ?>
+                <a href="login.php" class="btn btn-primary me-2">Войти</a>
+                <a href="register.php" class="btn btn-success">Зарегистрироваться</a> <!-- Изменён цвет кнопки -->
+            <?php else: ?>
                 <span class="me-3 text-white"><?= $profile_info ?></span>
                 <a href="<?= $profile_url ?>" class="btn btn-primary">Перейти в профиль</a>
-            </div>
-        <?php endif; ?>
+            <?php endif; ?>
+        </div>
+        <h1 class="text-center">Объекты недвижимости</h1>
         <div class="mb-4">
             <form id="filterForm" class="row g-3">
                 <div class="col-md-4">
@@ -70,11 +85,15 @@ $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Ко
         <div id="properties" class="row mt-4"></div>
     </div>
 
+    <div class="container mt-5">
+        <h2 class="text-center">Проданные объекты</h2>
+        <div id="soldProperties" class="row mt-4"></div>
+    </div>
+
     <script>
         // Функция для добавления объекта в избранное
         async function addToFavorites(propertyId) {
-            const clientId = <?= isset($_SESSION['user_id']) && $_SESSION['role'] === 'client' ? $_SESSION['user_id'] : 'null' ?>;
-            if (!clientId) {
+            if (!<?= json_encode($isClient) ?>) {
                 alert('Вы должны войти как клиент, чтобы добавлять в избранное.');
                 return;
             }
@@ -83,7 +102,7 @@ $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Ко
                 const response = await fetch('api.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ client_id: clientId, property_id: propertyId })
+                    body: JSON.stringify({ client_id: <?= json_encode($clientId) ?>, property_id: propertyId })
                 });
 
                 const result = await response.json();
@@ -100,8 +119,7 @@ $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Ко
 
         // Функция для покупки объекта недвижимости
         async function buyProperty(propertyId, price) {
-            const clientId = <?= isset($_SESSION['user_id']) && $_SESSION['role'] === 'client' ? $_SESSION['user_id'] : 'null' ?>;
-            if (!clientId) {
+            if (!<?= json_encode($isClient) ?>) {
                 alert('Вы должны войти как клиент, чтобы покупать объекты.');
                 return;
             }
@@ -110,7 +128,7 @@ $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Ко
                 const response = await fetch('api.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ client_id: clientId, property_id: propertyId, price })
+                    body: JSON.stringify({ client_id: <?= json_encode($clientId) ?>, property_id: propertyId, price })
                 });
 
                 const result = await response.json();
@@ -125,14 +143,18 @@ $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Ко
             }
         }
 
-        // Функция для загрузки объектов недвижимости с фильтрацией
+        // Функция для загрузки активных объектов недвижимости
         async function loadProperties(filters = {}) {
             try {
-                const queryParams = new URLSearchParams(filters).toString();
+                const queryParams = new URLSearchParams({ ...filters, sold: 'false' }).toString();
                 const response = await fetch(`api.php?${queryParams}`);
-                if (!response.ok) throw new Error('Не удалось загрузить объекты');
-                const properties = await response.json();
+                const result = await response.json();
 
+                if (!response.ok) {
+                    throw new Error(result.message || 'Не удалось загрузить объекты');
+                }
+
+                const properties = result.properties || [];
                 const propertiesContainer = document.getElementById('properties');
                 propertiesContainer.innerHTML = ''; // Очищаем контейнер
 
@@ -142,9 +164,21 @@ $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Ко
                 }
 
                 properties.forEach(property => {
+                    const photo = property.photos && property.photos.length > 0
+                        ? `<img src="${property.photos[0]}" class="card-img-top" alt="Фото объекта">`
+                        : `<div class="card-img-top">Нет фото</div>`; // Текст "Нет фото" на фоне
+
+                    const clientButtons = <?= json_encode($isClient) ?> ? `
+                        <div class="d-flex justify-content-between mt-3">
+                            <button class="btn btn-success btn-sm" onclick="buyProperty(${property.id}, ${property.price_rub})">Купить</button>
+                            <button class="btn btn-warning btn-sm" onclick="addToFavorites(${property.id})">В избранное</button>
+                        </div>
+                    ` : '';
+
                     const propertyCard = `
                         <div class="col-md-4">
                             <div class="card mb-4">
+                                ${photo}
                                 <div class="card-body">
                                     <h5 class="card-title">${property.address}</h5>
                                     <p class="card-text">
@@ -153,12 +187,7 @@ $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Ко
                                         <strong>Описание:</strong> ${property.description}<br>
                                         <strong>Продавец:</strong> ${property.agent_login}
                                     </p>
-                                    <div class="d-flex justify-content-between mt-3">
-                                        <?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'client'): ?>
-                                            <button class="btn btn-outline-primary btn-sm" onclick="addToFavorites(${property.id})">В избранное</button>
-                                            <button class="btn btn-success btn-sm" onclick="buyProperty(${property.id}, ${property.price_rub})">Купить</button>
-                                        <?php endif; ?>
-                                    </div>
+                                    ${clientButtons} <!-- Кнопки для клиента -->
                                 </div>
                             </div>
                         </div>
@@ -166,8 +195,8 @@ $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Ко
                     propertiesContainer.innerHTML += propertyCard;
                 });
             } catch (error) {
-                console.error(error);
-                alert('Ошибка при загрузке объектов. Проверьте консоль для подробностей.');
+                console.error('Ошибка при загрузке объектов:', error);
+                alert('Ошибка при загрузке объектов.');
             }
         }
 
@@ -175,9 +204,13 @@ $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Ко
         async function loadSoldProperties() {
             try {
                 const response = await fetch('api.php?sold=true');
-                if (!response.ok) throw new Error('Не удалось загрузить проданные объекты');
-                const properties = await response.json();
+                const result = await response.json();
 
+                if (!response.ok) {
+                    throw new Error(result.message || 'Не удалось загрузить проданные объекты');
+                }
+
+                const properties = result.properties || [];
                 const soldPropertiesContainer = document.getElementById('soldProperties');
                 soldPropertiesContainer.innerHTML = ''; // Очищаем контейнер
 
@@ -187,9 +220,14 @@ $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Ко
                 }
 
                 properties.forEach(property => {
+                    const photo = property.photos && property.photos.length > 0
+                        ? `<img src="${property.photos[0]}" class="card-img-top" alt="Фото объекта">`
+                        : `<div class="card-img-top">Нет фото</div>`; // Текст "Нет фото" на фоне
+
                     const propertyCard = `
                         <div class="col-md-4">
                             <div class="card mb-4">
+                                ${photo}
                                 <div class="card-body">
                                     <h5 class="card-title">${property.address}</h5>
                                     <p class="card-text">
@@ -206,8 +244,8 @@ $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Ко
                     soldPropertiesContainer.innerHTML += propertyCard;
                 });
             } catch (error) {
-                console.error(error);
-                alert('Ошибка при загрузке проданных объектов. Проверьте консоль для подробностей.');
+                console.error('Ошибка при загрузке проданных объектов:', error);
+                alert('Ошибка при загрузке проданных объектов.');
             }
         }
 
@@ -233,10 +271,5 @@ $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Ко
         });
     </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-
-    <div class="container mt-5">
-        <h2 class="text-center">Проданные объекты</h2>
-        <div id="soldProperties" class="row mt-4"></div>
-    </div>
 </body>
 </html>

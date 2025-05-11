@@ -70,7 +70,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <button type="submit" class="btn btn-primary w-100">Войти</button>
             </form>
             <div class="text-center mt-3">
-                <a href="register.php" class="btn btn-secondary w-100">Зарегистрироваться</a>
+                <a href="register.php" class="btn btn-success w-100 btn-spacing">Зарегистрироваться</a>
+                <a href="index.php" class="text-link">Продолжить без регистрации</a> <!-- Изменён стиль кнопки -->
             </div>
         </div>
     </div>

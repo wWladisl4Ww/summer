@@ -7,6 +7,16 @@ body {
 .card {
     background-color: #1e1e1e;
     color: #ffffff;
+    border: 1px solid #343a40; /* Добавляем границу */
+    border-radius: 8px; /* Скругляем углы */
+    overflow: hidden; /* Убираем выходящие элементы */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); /* Добавляем тень */
+    transition: transform 0.2s ease, box-shadow 0.2s ease; /* Добавляем анимацию */
+}
+
+.card:hover {
+    transform: translateY(-5px); /* Поднимаем карточку при наведении */
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3); /* Увеличиваем тень */
 }
 
 .modal-content {
@@ -21,7 +31,11 @@ body {
 /* Общие стили для заголовков */
 h1.text-center, h2.text-center {
     text-align: center;
-    margin-bottom: 20px;
+    font-family: 'Arial', sans-serif; /* Меняем шрифт */
+    font-weight: bold;
+    color: #ffffff;
+    text-transform: uppercase; /* Преобразуем текст в верхний регистр */
+    margin-bottom: 30px; /* Убираем лишний отступ */
 }
 
 /* Стили для кнопок */
@@ -56,6 +70,18 @@ h1.text-center, h2.text-center {
     border-color: #1e7e34;
 }
 
+.btn-spacing {
+    margin-bottom: 10px; /* Отступ между кнопками */
+}
+
+.btn {
+    transition: background-color 0.2s ease, transform 0.2s ease; /* Добавляем анимацию */
+}
+
+.btn:hover {
+    transform: scale(1.05); /* Увеличиваем кнопку при наведении */
+}
+
 /* Стили для контейнеров */
 .container {
     margin-top: 50px;
@@ -80,9 +106,122 @@ h1.text-center, h2.text-center {
 }
 
 .empty-section-message {
-    color: #343a40; /* Тёмно-серый цвет */
-    font-weight: 400; /* Более тонкий шрифт */
+    color: #6c757d; /* Более светлый серый цвет */
+    font-style: italic; /* Добавляем курсив */
     text-align: center;
     margin-top: 20px;
-    font-size: 1.2rem; /* Увеличенный размер текста */
+    font-size: 1.1rem; /* Немного увеличиваем размер текста */
+}
+
+.status-confirmed {
+    color: #28a745; /* Зелёный цвет */
+    font-weight: bold;
+}
+
+.status-pending {
+    color: orange; /* Жёлтый/оранжевый цвет для статуса "Ожидает подтверждения" */
+    font-weight: bold;
+}
+
+.property-photos img {
+    margin-bottom: 15px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    padding: 5px;
+    max-height: 200px;
+    object-fit: cover;
+}
+
+/* Стили для квадратных изображений */
+.card-img-top {
+    width: 100%;
+    aspect-ratio: 1 / 1; /* Соотношение сторон 1:1 */
+    object-fit: cover; /* Обрезаем изображение, чтобы оно соответствовало квадрату */
+    background-color: #1a1a1a; /* Сделали фон темнее */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff; /* Цвет текста для отсутствующего фото */
+    font-size: 1rem;
+    font-weight: bold;
+}
+
+.card-img-top img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* Изображение заполняет квадрат */
+    position: absolute; /* Устанавливаем абсолютное позиционирование */
+    top: 0;
+    left: 0;
+    z-index: 0; /* Устанавливаем уровень слоя для изображения */
+}
+
+.card-body {
+    padding: 15px; /* Добавляем отступы */
+}
+
+.card-title {
+    font-size: 1.2rem;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.card-text {
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.text-link {
+    display: inline-block;
+    color: #6c757d; /* Серый цвет */
+    font-size: 0.9rem; /* Уменьшенный размер текста */
+    text-decoration: none; /* Убираем подчеркивание */
+    margin-top: 10px;
+}
+
+.text-link:hover {
+    color: #495057; /* Более тёмный серый при наведении */
+    text-decoration: underline; /* Подчеркивание при наведении */
+}
+
+.form-text {
+    color: #b0b0b0; /* Светло-серый цвет */
+    font-size: 0.875rem; /* Уменьшенный размер текста */
+}
+
+/* Стили для формы фильтрации */
+#filterForm {
+    background-color: #1e1e1e;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+#filterForm .form-label {
+    color: #b0b0b0; /* Светло-серый цвет для меток */
+}
+
+#filterForm .btn-primary {
+    background-color: #007bff;
+    border-color: #007bff;
+    font-weight: bold;
+}
+
+/* Стили для футера */
+footer {
+    background-color: #1e1e1e;
+    color: #b0b0b0;
+    text-align: center;
+    padding: 15px 0;
+    margin-top: 50px;
+    font-size: 0.9rem;
+}
+
+footer a {
+    color: #007bff;
+    text-decoration: none;
+}
+
+footer a:hover {
+    text-decoration: underline;
 }

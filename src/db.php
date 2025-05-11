@@ -1,4 +1,7 @@
 <?php
+// Устанавливаем уровень ошибок
+error_reporting(E_ERROR | E_PARSE);
+
 $host = 'db';
 $db = 'real_estate';
 $user = 'admin';

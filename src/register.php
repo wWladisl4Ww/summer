@@ -5,42 +5,39 @@ $message = '';
 $showLoginButton = false;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $role = $_POST['role']; // 'agent' или 'client'
-    $login = $_POST['login'];
-    $password = password_hash($_POST['password'], PASSWORD_BCRYPT); // Хэшируем пароль
-    $name = $_POST['name'];
-    $phone = $_POST['phone'];
-    $email = $_POST['email'];
+    $role = $_POST['role'] ?? null;
+    $login = $_POST['login'] ?? null;
+    $password = $_POST['password'] ?? null;
+    $name = $_POST['name'] ?? null;
+    $phone = $_POST['phone'] ?? null;
+    $email = $_POST['email'] ?? null;
 
-    try {
-        // Проверяем уникальность логина
-        if ($role === 'agent') {
-            $stmt = $pdo->prepare("SELECT COUNT(*) FROM agents WHERE login = ?");
-        } elseif ($role === 'client') {
-            $stmt = $pdo->prepare("SELECT COUNT(*) FROM clients WHERE login = ?");
-        } else {
-            throw new Exception('Неверная роль.');
-        }
+    // Проверяем, что все поля заполнены
+    if (!$role || !$login || !$password || !$name || !$phone || !$email) {
+        $message = '<div class="alert alert-danger">Все поля обязательны для заполнения.</div>';
+    } else {
+        try {
+            // Проверяем уникальность логина
+            $stmt = $pdo->prepare($role === 'agent' 
+                ? "SELECT COUNT(*) FROM agents WHERE login = ?" 
+                : "SELECT COUNT(*) FROM clients WHERE login = ?");
+            $stmt->execute([$login]);
+            $count = $stmt->fetchColumn();
 
-        $stmt->execute([$login]);
-        $count = $stmt->fetchColumn();
-
-        if ($count > 0) {
-            $message = '<div class="alert alert-danger">Логин уже занят. Попробуйте другой.</div>';
-        } else {
-            // Добавляем пользователя
-            if ($role === 'agent') {
-                $stmt = $pdo->prepare("INSERT INTO agents (login, password, name, phone, email) VALUES (?, ?, ?, ?, ?)");
-            } elseif ($role === 'client') {
-                $stmt = $pdo->prepare("INSERT INTO clients (login, password, name, phone, email) VALUES (?, ?, ?, ?, ?)");
+            if ($count > 0) {
+                $message = '<div class="alert alert-danger">Логин уже занят. Попробуйте другой.</div>';
+            } else {
+                // Добавляем пользователя
+                $stmt = $pdo->prepare($role === 'agent' 
+                    ? "INSERT INTO agents (login, password, name, phone, email) VALUES (?, ?, ?, ?, ?)" 
+                    : "INSERT INTO clients (login, password, name, phone, email) VALUES (?, ?, ?, ?, ?)");
+                $stmt->execute([$login, password_hash($password, PASSWORD_BCRYPT), $name, $phone, $email]);
+                $message = '<div class="alert alert-success">Регистрация прошла успешно!</div>';
+                $showLoginButton = true;
             }
-
-            $stmt->execute([$login, $password, $name, $phone, $email]);
-            $message = '<div class="alert alert-success">Регистрация прошла успешно!</div>';
-            $showLoginButton = true;
+        } catch (PDOException $e) {
+            $message = '<div class="alert alert-danger">Ошибка регистрации. Попробуйте позже.</div>';
         }
-    } catch (PDOException $e) {
-        $message = '<div class="alert alert-danger">Ошибка регистрации. Попробуйте позже.</div>';
     }
 }
 ?>
@@ -55,9 +52,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link href="style.css" rel="stylesheet">
 </head>
 <body>
-    <div class="container mt-5">
+    <div class="container">
         <h1 class="text-center">Регистрация</h1>
-        <div class="registration-container mt-4">
+        <div class="registration-container">
             <?= $message ?>
             <?php if ($showLoginButton): ?>
                 <div class="text-center mt-3">
@@ -92,8 +89,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <label for="email" class="form-label">Email</label>
                         <input type="email" class="form-control" id="email" name="email" required>
                     </div>
-                    <button type="submit" class="btn btn-primary">Зарегистрироваться</button>
+                    <button type="submit" class="btn btn-success w-100">Зарегистрироваться</button> <!-- Кнопка во всю ширину -->
                 </form>
+                <div class="text-center mt-3">
+                    <a href="login.php" class="text-link">Обратно ко входу</a> <!-- Изменён стиль кнопки -->
+                </div>
             <?php endif; ?>
         </div>
     </div>

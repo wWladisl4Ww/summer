@@ -2,16 +2,137 @@
 require 'db.php';
 session_start();
 
+// Проверяем, что пользователь авторизован как агент
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'agent') {
     header('Location: login.php');
     exit;
 }
 
-$agent_id = $_SESSION['user_id'];
+$agent_id = $_SESSION['user_id'] ?? null;
 $profile_info = 'Агент (' . ($_SESSION['login'] ?? 'Неизвестно') . ')';
 
 // Предопределённые категории типов недвижимости
 $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Коммерческая недвижимость'];
+
+$message = '';
+
+// Обработка удаления объекта
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_property_id'])) {
+    $property_id = (int)$_POST['delete_property_id'];
+    try {
+        $stmt = $pdo->prepare("DELETE FROM properties WHERE id = ? AND agent_id = ?");
+        $stmt->execute([$property_id, $_SESSION['user_id']]);
+        $message = '<div class="alert alert-success">Объект успешно удалён.</div>';
+    } catch (PDOException $e) {
+        $message = '<div class="alert alert-danger">Ошибка при удалении объекта.</div>';
+    }
+}
+
+// Обработка редактирования объекта
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_property_id'])) {
+    $property_id = (int)$_POST['edit_property_id'];
+    $address = $_POST['address'] ?? '';
+    $price = $_POST['price'] ?? 0;
+    $type = $_POST['type'] ?? '';
+    $description = $_POST['description'] ?? '';
+
+    try {
+        $stmt = $pdo->prepare("UPDATE properties SET address = ?, price = ?, type = ?, description = ? WHERE id = ? AND agent_id = ?");
+        $stmt->execute([$address, $price, $type, $description, $property_id, $_SESSION['user_id']]);
+        $message = '<div class="alert alert-success">Объект успешно обновлён.</div>';
+    } catch (PDOException $e) {
+        $message = '<div class="alert alert-danger">Ошибка при обновлении объекта.</div>';
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $address = $_POST['address'] ?? '';
+    $price = $_POST['price'] ?? 0;
+    $type = $_POST['type'] ?? '';
+    $description = $_POST['description'] ?? '';
+    $agent_id = $_SESSION['user_id'];
+    $photo = $_FILES['photo'] ?? null;
+
+    if (!$photo || is_array($photo['name'])) {
+        $message = '<div class="alert alert-danger">Можно загрузить только одну фотографию.</div>';
+    } else {
+        $allowedTypes = ['image/png', 'image/jpeg', 'image/jpg'];
+        $fileType = mime_content_type($photo['tmp_name']);
+
+        if (!in_array($fileType, $allowedTypes)) {
+            $message = '<div class="alert alert-danger">Недопустимый тип файла.</div>';
+        } else {
+            $uploadDir = __DIR__ . '/uploads/';
+            if (!is_dir($uploadDir)) {
+                mkdir($uploadDir, 0777, true);
+            }
+
+            $fileName = uniqid() . '_' . basename($photo['name']);
+            $filePath = $uploadDir . $fileName;
+
+            if (move_uploaded_file($photo['tmp_name'], $filePath)) {
+                try {
+                    $pdo->beginTransaction();
+
+                    // Создаём объект недвижимости
+                    $stmt = $pdo->prepare("INSERT INTO properties (agent_id, address, price, type, description) VALUES (?, ?, ?, ?, ?)");
+                    $stmt->execute([$agent_id, $address, $price, $type, $description]);
+                    $property_id = $pdo->lastInsertId();
+
+                    // Добавляем фото
+                    $stmt = $pdo->prepare("INSERT INTO property_photos (property_id, photo_path) VALUES (?, ?)");
+                    $stmt->execute([$property_id, 'uploads/' . $fileName]);
+
+                    $pdo->commit();
+                    $message = '<div class="alert alert-success">Объект успешно добавлен с фотографией.</div>';
+                } catch (PDOException $e) {
+                    $pdo->rollBack();
+                    $message = '<div class="alert alert-danger">Ошибка при добавлении объекта.</div>';
+                }
+            } else {
+                $message = '<div class="alert alert-danger">Ошибка при загрузке файла.</div>';
+            }
+        }
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['photo'])) {
+    $property_id = $_POST['property_id'] ?? null;
+    $photo = $_FILES['photo'];
+
+    if (!$property_id) {
+        $message = '<div class="alert alert-danger">Не указан объект недвижимости для загрузки фото.</div>';
+    } elseif (is_array($photo['name'])) {
+        $message = '<div class="alert alert-danger">Можно загрузить только одно фото.</div>';
+    } else {
+        $allowedTypes = ['image/png', 'image/jpeg', 'image/jpg'];
+        $fileType = mime_content_type($photo['tmp_name']);
+
+        if (!in_array($fileType, $allowedTypes)) {
+            $message = '<div class="alert alert-danger">Недопустимый тип файла.</div>';
+        } else {
+            $uploadDir = __DIR__ . '/uploads/';
+            if (!is_dir($uploadDir)) {
+                mkdir($uploadDir, 0777, true);
+            }
+
+            $fileName = uniqid() . '_' . basename($photo['name']);
+            $filePath = $uploadDir . $fileName;
+
+            if (move_uploaded_file($photo['tmp_name'], $filePath)) {
+                try {
+                    $stmt = $pdo->prepare("INSERT INTO property_photos (property_id, photo_path) VALUES (?, ?)");
+                    $stmt->execute([$property_id, 'uploads/' . $fileName]);
+                    $message = '<div class="alert alert-success">Фото успешно загружено.</div>';
+                } catch (PDOException $e) {
+                    $message = '<div class="alert alert-danger">Ошибка при сохранении фото в базе данных.</div>';
+                }
+            } else {
+                $message = '<div class="alert alert-danger">Ошибка при загрузке файла.</div>';
+            }
+        }
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -51,29 +172,36 @@ $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Ко
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
                     </div>
                     <div class="modal-body">
-                        <form id="addPropertyForm">
+                        <form id="addPropertyForm" enctype="multipart/form-data">
                             <div class="mb-3">
                                 <label for="address" class="form-label">Адрес</label>
-                                <input type="text" class="form-control" id="address" required>
+                                <input type="text" class="form-control" id="address" name="address" required>
                             </div>
                             <div class="mb-3">
                                 <label for="price" class="form-label">Цена</label>
-                                <input type="number" class="form-control" id="price" required>
+                                <input type="number" class="form-control" id="price" name="price" required>
                             </div>
                             <div class="mb-3">
                                 <label for="type" class="form-label">Тип</label>
-                                <select class="form-select" id="type" required>
+                                <select class="form-select" id="type" name="type" required>
                                     <option value="">Выберите тип</option>
-                                    <?php foreach ($property_types as $type): ?>
-                                        <option value="<?= $type ?>"><?= $type ?></option>
-                                    <?php endforeach; ?>
+                                    <option value="Квартира">Квартира</option>
+                                    <option value="Дом">Дом</option>
+                                    <option value="Вилла">Вилла</option>
+                                    <option value="Офис">Офис</option>
+                                    <option value="Коммерческая недвижимость">Коммерческая недвижимость</option>
                                 </select>
                             </div>
                             <div class="mb-3">
                                 <label for="description" class="form-label">Описание</label>
-                                <textarea class="form-control" id="description" rows="3" required></textarea>
+                                <textarea class="form-control" id="description" name="description" rows="3" required></textarea>
                             </div>
-                            <button type="submit" class="btn btn-primary">Добавить</button>
+                            <div class="mb-3">
+                                <label for="photo" class="form-label">Фото</label>
+                                <input type="file" class="form-control" id="photo" name="photo" accept="image/*" required>
+                                <small class="form-text">Можно загрузить только одно фото.</small>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Добавить объект</button>
                         </form>
                     </div>
                 </div>
@@ -89,7 +217,7 @@ $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Ко
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
                     </div>
                     <div class="modal-body">
-                        <form id="editPropertyForm">
+                        <form id="editPropertyForm" enctype="multipart/form-data">
                             <input type="hidden" id="editPropertyId">
                             <div class="mb-3">
                                 <label for="editAddress" class="form-label">Адрес</label>
@@ -112,6 +240,10 @@ $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Ко
                                 <label for="editDescription" class="form-label">Описание</label>
                                 <textarea class="form-control" id="editDescription" rows="3" required></textarea>
                             </div>
+                            <div class="mb-3">
+                                <label for="editPhotos" class="form-label">Фотографии</label>
+                                <input type="file" class="form-control" id="editPhotos" name="photos[]" multiple>
+                            </div>
                             <button type="submit" class="btn btn-primary">Сохранить изменения</button>
                         </form>
                     </div>
@@ -121,13 +253,24 @@ $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Ко
     </div>
 
     <script>
-        // Функция для загрузки активных объектов недвижимости агента
-        async function loadActiveProperties() {
-            try {
-                const response = await fetch(`api.php?sold=false&agent_id=${<?= $agent_id ?>}`);
-                if (!response.ok) throw new Error('Не удалось загрузить активные объекты');
-                const properties = await response.json();
+        document.getElementById('photo').addEventListener('change', function (e) {
+            if (this.files.length > 1) {
+                alert('Можно загрузить только один файл.');
+                this.value = ''; // Сбрасываем выбор файлов
+            }
+        });
 
+        // Функция для загрузки активных объектов недвижимости агента
+        async function loadActiveProperties(agentId) {
+            try {
+                const response = await fetch(`api.php?agent_id=${agentId}&sold=false`);
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.message || 'Не удалось загрузить активные объекты');
+                }
+
+                const properties = result.properties || [];
                 const activePropertiesContainer = document.getElementById('activeProperties');
                 activePropertiesContainer.innerHTML = ''; // Очищаем контейнер
 
@@ -137,18 +280,24 @@ $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Ко
                 }
 
                 properties.forEach(property => {
+                    const photo = property.photos && property.photos.length > 0
+                        ? `<img src="${property.photos[0]}" class="card-img-top" alt="Фото объекта">`
+                        : `<div class="card-img-top">Нет фото</div>`; // Текст "Нет фото" на фоне
+
                     const propertyCard = `
                         <div class="col-md-4">
                             <div class="card mb-4">
+                                ${photo}
                                 <div class="card-body">
                                     <h5 class="card-title">${property.address}</h5>
                                     <p class="card-text">
                                         <strong>Тип:</strong> ${property.type}<br>
                                         <strong>Цена:</strong> ${property.price_rub} ₽<br>
-                                        <strong>Описание:</strong> ${property.description}
+                                        <strong>Описание:</strong> ${property.description}<br>
+                                        <strong>Статус:</strong> ${property.is_sold ? 'Продан' : 'Активен'}
                                     </p>
-                                    <div class="d-flex justify-content-between mt-3">
-                                        <button class="btn btn-warning btn-sm" onclick="editProperty(${property.id}, '${property.address}', ${property.price_rub}, '${property.type}', '${property.description}')">Редактировать</button>
+                                    <div class="d-flex justify-content-between">
+                                        <button class="btn btn-warning btn-sm" onclick="editProperty(${property.id}, '${property.address}', ${property.price}, '${property.type}', '${property.description}')">Редактировать</button>
                                         <button class="btn btn-danger btn-sm" onclick="deleteProperty(${property.id})">Удалить</button>
                                     </div>
                                 </div>
@@ -158,18 +307,22 @@ $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Ко
                     activePropertiesContainer.innerHTML += propertyCard;
                 });
             } catch (error) {
-                console.error(error);
+                console.error('Ошибка при загрузке активных объектов:', error);
                 alert('Ошибка при загрузке активных объектов. Проверьте консоль для подробностей.');
             }
         }
 
         // Функция для загрузки проданных объектов агента
-        async function loadSoldProperties() {
+        async function loadSoldProperties(agentId) {
             try {
-                const response = await fetch(`api.php?sold=true&agent_id=${<?= $agent_id ?>}`);
-                if (!response.ok) throw new Error('Не удалось загрузить проданные объекты');
-                const properties = await response.json();
+                const response = await fetch(`api.php?agent_id=${agentId}&sold=true`);
+                const result = await response.json();
 
+                if (!response.ok) {
+                    throw new Error(result.message || 'Не удалось загрузить проданные объекты');
+                }
+
+                const properties = result.properties || [];
                 const soldPropertiesContainer = document.getElementById('soldProperties');
                 soldPropertiesContainer.innerHTML = ''; // Очищаем контейнер
 
@@ -179,9 +332,14 @@ $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Ко
                 }
 
                 properties.forEach(property => {
+                    const photo = property.photos && property.photos.length > 0
+                        ? `<img src="${property.photos[0]}" class="card-img-top" alt="Фото объекта">`
+                        : `<div class="card-img-top">Нет фото</div>`; // Текст "Нет фото" на фоне
+
                     const propertyCard = `
                         <div class="col-md-4">
                             <div class="card mb-4">
+                                ${photo}
                                 <div class="card-body">
                                     <h5 class="card-title">${property.address}</h5>
                                     <p class="card-text">
@@ -197,7 +355,7 @@ $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Ко
                     soldPropertiesContainer.innerHTML += propertyCard;
                 });
             } catch (error) {
-                console.error(error);
+                console.error('Ошибка при загрузке проданных объектов:', error);
                 alert('Ошибка при загрузке проданных объектов. Проверьте консоль для подробностей.');
             }
         }
@@ -230,41 +388,32 @@ $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Ко
         document.getElementById('editPropertyForm').addEventListener('submit', async function (e) {
             e.preventDefault();
 
-            const id = document.getElementById('editPropertyId').value;
-            const address = document.getElementById('editAddress').value.trim();
-            const price = parseFloat(document.getElementById('editPrice').value);
-            const type = document.getElementById('editType').value;
-            const description = document.getElementById('editDescription').value.trim();
+            const formData = new FormData(this);
+            const photos = document.getElementById('editPhotos').files;
 
-            if (!id || !address || !price || !type || !description) {
-                alert('Все поля должны быть заполнены.');
+            // Проверяем, что загружается только одна фотография
+            if (photos.length > 1) {
+                alert('Можно загрузить только одну фотографию.');
                 return;
             }
 
             try {
                 const response = await fetch('api.php', {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        id,
-                        address,
-                        price,
-                        type,
-                        description
-                    })
+                    body: formData
                 });
 
                 const result = await response.json();
                 if (response.ok) {
                     alert(result.message);
-                    const editModal = bootstrap.Modal.getInstance(document.getElementById('editPropertyModal'));
-                    editModal.hide();
-                    loadActiveProperties(); // Обновляем список активных объектов
+                    loadActiveProperties(<?= json_encode($agent_id) ?>); // Обновляем список активных объектов
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('editPropertyModal'));
+                    modal.hide();
                 } else {
                     alert(result.message || 'Ошибка при редактировании объекта.');
                 }
             } catch (error) {
-                console.error(error);
+                console.error('Ошибка при редактировании объекта:', error);
                 alert('Ошибка при редактировании объекта. Проверьте консоль для подробностей.');
             }
         });
@@ -273,40 +422,26 @@ $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Ко
         document.getElementById('addPropertyForm').addEventListener('submit', async function (e) {
             e.preventDefault();
 
-            const address = document.getElementById('address').value.trim();
-            const price = parseFloat(document.getElementById('price').value);
-            const type = document.getElementById('type').value;
-            const description = document.getElementById('description').value.trim();
-
-            if (!address || !price || !type || !description) {
-                alert('Все поля должны быть заполнены.');
-                return;
-            }
+            const formData = new FormData(this);
+            formData.append('agent_id', <?= json_encode($agent_id) ?>);
 
             try {
                 const response = await fetch('api.php', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        address,
-                        price,
-                        type,
-                        description,
-                        agent_id: <?= $agent_id ?>
-                    })
+                    body: formData
                 });
 
                 const result = await response.json();
                 if (response.ok) {
                     alert(result.message);
-                    loadActiveProperties();
+                    loadActiveProperties(<?= json_encode($agent_id) ?>); // Обновляем список активных объектов
                     const modal = bootstrap.Modal.getInstance(document.getElementById('addPropertyModal'));
                     modal.hide();
                 } else {
                     alert(result.message || 'Ошибка при добавлении объекта.');
                 }
             } catch (error) {
-                console.error(error);
+                console.error('Ошибка при добавлении объекта:', error);
                 alert('Ошибка при добавлении объекта. Проверьте консоль для подробностей.');
             }
         });
@@ -316,41 +451,60 @@ $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Ко
             if (!confirm('Вы уверены, что хотите удалить этот объект?')) return;
 
             try {
+                console.log('Отправляем запрос на удаление объекта с ID:', propertyId);
+
                 const response = await fetch('api.php', {
                     method: 'DELETE',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: propertyId })
+                    body: JSON.stringify({ id: propertyId }) // Передаём корректный параметр id
                 });
 
                 const result = await response.json();
+                console.log('Ответ сервера на удаление объекта:', result);
+
                 if (response.ok) {
                     alert(result.message);
-                    loadActiveProperties();
+                    loadActiveProperties(<?= json_encode($agent_id) ?>); // Обновляем список активных объектов
                 } else {
                     alert(result.message || 'Ошибка при удалении объекта.');
                 }
             } catch (error) {
-                console.error(error);
+                console.error('Ошибка при удалении объекта:', error);
                 alert('Ошибка при удалении объекта. Проверьте консоль для подробностей.');
             }
         }
 
         // Функция для загрузки сделок агента
-        async function loadAgentDeals() {
+        async function loadAgentDeals(agentId) {
             try {
-                const response = await fetch(`api.php?agent_id=${<?= $agent_id ?>}`);
-                if (!response.ok) throw new Error('Не удалось загрузить сделки');
-                const deals = await response.json();
+                console.log(`Запрос на загрузку сделок агента: api.php?agent_id=${agentId}`);
 
+                const response = await fetch(`api.php?agent_id=${agentId}`);
+                const result = await response.json();
+
+                console.log('Ответ сервера для сделок агента:', result);
+
+                if (!response.ok) {
+                    throw new Error(result.message || 'Не удалось загрузить сделки агента');
+                }
+
+                const deals = result.deals || [];
                 const dealsContainer = document.getElementById('deals');
                 dealsContainer.innerHTML = ''; // Очищаем контейнер
 
                 if (deals.length === 0) {
-                    dealsContainer.innerHTML = '<p class="empty-section-message">Этот раздел пока что пуст</p>';
+                    dealsContainer.innerHTML = '<p class="empty-section-message">У вас пока нет сделок</p>';
                     return;
                 }
 
                 deals.forEach(deal => {
+                    const statusClass = deal.is_confirmed ? 'status-confirmed' : 'status-pending'; // Используем класс 'status-pending' для жёлтого текста
+                    const statusText = deal.is_confirmed ? 'Подтверждена' : 'Ожидает подтверждения';
+
+                    const confirmButton = !deal.is_confirmed ? `
+                        <button class="btn btn-success btn-sm" onclick="confirmDeal(${deal.id})">Подтвердить</button>
+                    ` : '';
+
                     const dealCard = `
                         <div class="col-md-4">
                             <div class="card mb-4">
@@ -361,9 +515,9 @@ $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Ко
                                         <strong>Клиент:</strong> ${deal.client_name || 'Неизвестно'}<br>
                                         <strong>Цена:</strong> ${deal.price || 'Неизвестно'} ₽<br>
                                         <strong>Дата:</strong> ${deal.deal_date || 'Неизвестно'}<br>
-                                        <strong>Статус:</strong> ${deal.is_confirmed ? 'Подтверждена' : 'Ожидает подтверждения'}
+                                        <strong>Статус:</strong> <span class="${statusClass}">${statusText}</span>
                                     </p>
-                                    ${!deal.is_confirmed ? `<button class="btn btn-success btn-sm" onclick="confirmDeal(${deal.id})">Подтвердить</button>` : ''}
+                                    ${confirmButton}
                                 </div>
                             </div>
                         </div>
@@ -378,6 +532,8 @@ $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Ко
 
         // Функция для подтверждения сделки
         async function confirmDeal(dealId) {
+            if (!confirm('Вы уверены, что хотите подтвердить эту сделку?')) return;
+
             try {
                 const response = await fetch('api.php', {
                     method: 'PATCH',
@@ -388,7 +544,7 @@ $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Ко
                 const result = await response.json();
                 if (response.ok) {
                     alert(result.message);
-                    loadAgentDeals(); // Обновляем список сделок
+                    loadAgentDeals(<?= json_encode($agent_id) ?>); // Обновляем список сделок
                 } else {
                     alert(result.message || 'Ошибка при подтверждении сделки.');
                 }
@@ -400,9 +556,15 @@ $property_types = ['Квартира', 'Дом', 'Вилла', 'Офис', 'Ко
 
         // Загружаем данные при загрузке страницы
         document.addEventListener('DOMContentLoaded', () => {
-            loadAgentDeals();
-            loadActiveProperties();
-            loadSoldProperties();
+            const agentId = <?= json_encode($agent_id) ?>; // Передаём agent_id в JavaScript
+            if (agentId) {
+                loadAgentDeals(agentId);
+                loadActiveProperties(agentId);
+                loadSoldProperties(agentId);
+            } else {
+                console.error('Ошибка: agent_id не определён.');
+                alert('Ошибка: Не удалось загрузить данные агента.');
+            }
         });
     </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
